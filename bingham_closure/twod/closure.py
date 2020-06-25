@@ -134,3 +134,42 @@ def twod_bingham_closure(D, E):
     SD = SD.reshape(in_sh)
     SE = SE.reshape(in_sh)
     return SD, SE
+
+def twod_bingham_closure_short(D):
+    """
+    Direct Estimation of Bingham Closure (through rotation)
+    Returns S0000 and S0001
+    (all other components can be computed from these)
+    """
+    # some basic checks for D
+    assert len(D.shape) > 2, "D must have at least 3 dimensions"
+    assert D.shape[0] == 2 and D.shape[1] == 2, "D must be 2x2 in leading dimensions"
+    # reshape D for use by this function
+    in_sh = D.shape
+    sh = list(D.shape[:2]) + [np.prod(D.shape[2:]),]
+    D = D.reshape(sh)
+    # transpose D for call to Eig routine
+    Dd = np.transpose(D, (2,0,1))
+    # compute eigenvalues and eigenvectors
+    # PARALLELIZE THIS OPERATION FOR PERFORMANCE
+    EV = np.linalg.eigh(Dd)
+    Eval = EV[0][:,::-1]
+    Evec = EV[1][:,:,::-1]
+    mu = Eval[:,0]
+    # enforce eigenvalue constraint if it isn't quite met
+    mu[mu<0.5] = 0.5
+    mu[mu>1.0] = 1.0
+    # compute S0000 in the rotated frame
+    tS0000 = interper(mu)
+    # compute S0011 and S1111 in rotated frame according to known identities
+    tS0011 = Eval[:,0] - tS0000
+    tS1111 = Eval[:,1] - tS0011
+    # transform to real coordinates (for S0000 and S0001)
+    l00, l01, l10, l11 = Evec[:,0,0], Evec[:,0,1], Evec[:,1,0], Evec[:,1,1]
+    S0000 = l00**4*tS0000 + 6*l01**2*l00**2*tS0011 + l01**4*tS1111
+    S0001 = l00**3*l10*tS0000 + (3*l00*l01**2*l10+3*l00**2*l01*l11)*tS0011 + l01**3*l11*tS1111
+    # reshape these for return
+    out_sh = in_sh[2:]
+    S0000 = S0000.reshape(out_sh)
+    S0001 = S0001.reshape(out_sh)
+    return S0000, S0001
